@@ -1,0 +1,65 @@
+name: Stats dashboard
+
+# Aggiorna la dashboard dei download (GitHub Pages):
+# - ogni giorno accoda uno snapshot in stats/stats.json e rigenera index.html;
+# - lo storico si popola nel tempo (l'API dà solo il totale cumulativo, non la serie storica);
+# - avviabile a mano.
+
+on:
+  schedule:
+    - cron: "40 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: stats
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Aggiorna statistiche
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          STATS_REPO: ${{ github.repository }}
+        run: python3 stats/update_stats.py
+
+      - name: Commit storico aggiornato
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet -- stats/; then
+            git add stats/stats.json stats/index.html
+            git commit -m "Stats: snapshot $(date -u +%Y-%m-%d)"
+            git push
+          else
+            echo "Nessuna variazione negli snapshot."
+          fi
+
+      - name: Prepara artefatto Pages
+        run: |
+          mkdir -p _site
+          cp stats/index.html _site/index.html
+          cp stats/stats.json _site/stats.json
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
