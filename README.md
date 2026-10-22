@@ -5,18 +5,20 @@ Questo repository contiene **solo gli APK** da installare.
 
 ## Installazione
 
-**Con aggiornamenti automatici (consigliato)**
-
-1. Installa [Obtainium](https://github.com/ImranR98/Obtainium/releases) sul telefono.
-2. In Obtainium: **Aggiungi app** → incolla `https://github.com/emlafza/ytaudio-releases` → **Aggiungi**.
-3. Installa YTAudio da Obtainium. Gli aggiornamenti arriveranno da soli.
-
-**Manuale**
-
-Scarica l'ultimo `ytaudio-x.y.z.apk` dalla pagina [Releases](https://github.com/emlafza/ytaudio-releases/releases/latest)
-e aprilo sul telefono (consenti l'installazione da origini sconosciute se richiesto).
+1. Scarica l'ultimo `ytaudio-x.y.z.apk` dalla pagina [Releases](https://github.com/emlafza/ytaudio-releases/releases/latest).
+2. Aprilo sul telefono e, se richiesto, consenti l'installazione da questa origine.
 
 Requisiti: Android 10 o successivo.
+
+## Aggiornamenti
+
+Dalla versione 1.2.0 **l'app si aggiorna da sola**: avvisa quando è disponibile una nuova
+versione, la scarica e la installa (la prima volta chiede il permesso di installare app).
+Non serve nessuno strumento esterno.
+
+In alternativa puoi usare [Obtainium](https://github.com/ImranR98/Obtainium/releases):
+aggiungi l'app con l'URL `https://github.com/emlafza/ytaudio-releases` e gestirà gli
+aggiornamenti al posto dell'app.
 
 ## Perché si aggiorna spesso
 
