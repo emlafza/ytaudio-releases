@@ -54,17 +54,30 @@ def load_history():
 
 
 def update_history(history, per_version):
+    """Aggiorna lo storico. Ritorna (history, changed): changed è True solo se
+    i dati di download sono effettivamente cambiati, così non si tocca
+    updated_at (e quindi i file) quando non c'è nulla di nuovo."""
     today = date.today().isoformat()
     total = sum(per_version.values())
     snap = {"date": today, "total": total, "versions": per_version}
     snaps = history["snapshots"]
+
+    # Confronto con l'ultimo snapshot ignorando la data: conta solo total/versions.
+    def payload(s):
+        return {"total": s["total"], "versions": s["versions"]}
+
+    last = snaps[-1] if snaps else None
+    changed = last is None or payload(last) != payload(snap)
+
     # Una sola riga al giorno: sostituisce quella odierna se già presente
     if snaps and snaps[-1]["date"] == today:
         snaps[-1] = snap
     else:
         snaps.append(snap)
-    history["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    return history
+
+    if changed:
+        history["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return history, changed
 
 
 def render_html(history):
@@ -180,7 +193,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
       <h2>Andamento nel tempo</h2>
       <p class="hint">Download totali per giorno</p>
       <div class="chart-box"><canvas id="overTime"></canvas></div>
-      <div class="empty" id="overTimeEmpty" style="display:none">La curva si popola dai prossimi snapshot giornalieri.</div>
+      <div class="empty" id="overTimeEmpty" style="display:none">La curva si popola quando i download cambiano.</div>
     </div>
   </section>
 
@@ -193,7 +206,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   </section>
 
   <footer>
-    Fonte: GitHub Releases API · i conteggi sono cumulativi, l'andamento è ricostruito dagli snapshot giornalieri.<br>
+    Fonte: GitHub Releases API · i conteggi sono cumulativi, l'andamento è ricostruito dagli snapshot salvati a ogni variazione.<br>
     YTAudio è software libero (GPL-3.0).
   </footer>
 </div>
@@ -251,13 +264,31 @@ new Chart(document.getElementById('donut'), {
 });
 
 // Andamento nel tempo
+// Gli snapshot vengono salvati solo quando i download cambiano: tra due snapshot
+// il totale resta invariato. Usiamo quindi un asse temporale reale (coordinate x =
+// timestamp del giorno) e una linea "stepped", così i tratti piatti durano quanto
+// i giorni effettivamente trascorsi senza variazioni, senza dipendenze extra.
 const otEl = document.getElementById('overTime');
 if (snaps.length >= 2){
+  const DAY = 86400000;
+  const pts = snaps.map(s => ({x: Date.parse(s.date), y: s.total}));
+  // Estende l'ultimo punto fino a oggi, così il piatto finale è visibile.
+  const todayX = Date.parse(new Date().toISOString().slice(0,10));
+  const lastPt = pts[pts.length-1];
+  if (todayX > lastPt.x) pts.push({x: todayX, y: lastPt.y});
+  const fmtDay = x => new Date(x).toLocaleDateString('it-IT',{day:'2-digit',month:'short'});
   new Chart(otEl,{type:'line',
-    data:{labels:snaps.map(s=>s.date),datasets:[{data:snaps.map(s=>s.total),borderColor:ACCENT,borderWidth:2.5,
-      pointRadius:3,pointBackgroundColor:ACCENT,tension:.3,fill:true,
+    data:{datasets:[{data:pts,borderColor:ACCENT,borderWidth:2.5,
+      pointRadius:(c)=>c.dataIndex===pts.length-1 && todayX>lastPt.x ? 0 : 3,
+      pointBackgroundColor:ACCENT,stepped:true,fill:true,
       backgroundColor:(c)=>{const{ctx,chartArea}=c.chart;return chartArea?gradient(ctx,chartArea,'rgba(187,134,252,.35)','rgba(187,134,252,0)'):'transparent';}}]},
-    options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
+    options:{parsing:false,plugins:{legend:{display:false},
+        tooltip:{callbacks:{title:(items)=>fmtDay(items[0].parsed.x)}}},
+      scales:{
+        x:{type:'linear',offset:false,
+           min:pts[0].x, max:pts[pts.length-1].x,
+           ticks:{maxRotation:0,autoSkipPadding:16,callback:(v)=>fmtDay(v)}},
+        y:{beginAtZero:true,ticks:{precision:0}}}}});
 } else {
   otEl.style.display='none';
   document.getElementById('overTimeEmpty').style.display='grid';
@@ -289,7 +320,11 @@ def main():
         print(f"Errore nel recupero delle release: {e}", file=sys.stderr)
         return 1
     per_version = collect(releases)
-    history = update_history(load_history(), per_version)
+    history, changed = update_history(load_history(), per_version)
+    if not changed:
+        print(f"Nessuna variazione nei download (totale: {sum(per_version.values())}). "
+              f"File invariati.")
+        return 0
     STATS.write_text(json.dumps(history, ensure_ascii=False, indent=2) + "\n")
     INDEX.write_text(render_html(history))
     print(f"Versioni: {len(per_version)} | totale download: {sum(per_version.values())} | "
